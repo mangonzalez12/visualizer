@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dimensionality Reduction Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2026;
+    --border: #2a2d35;
+    --text: #e8eaf0;
+    --muted: #6b7080;
+    --accent: #5b8dee;
+    --accent2: #e85b8d;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 1.25rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--accent); }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+  }
+
+  /* Upload */
+  #drop-zone {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--surface2);
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(91,141,238,0.06);
+  }
+  #drop-zone input { display: none; }
+  .upload-icon { font-size: 22px; margin-bottom: 6px; }
+  .upload-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .upload-sub { font-size: 11px; color: var(--muted); }
+
+  #file-info {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.6;
+  }
+
+  /* Method tabs */
+  .method-tabs {
+    display: flex;
+    background: var(--surface2);
+    border-radius: 7px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .method-tab {
+    flex: 1;
+    padding: 6px 0;
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    transition: background 0.15s, color 0.15s;
+    letter-spacing: 0.04em;
+  }
+  .method-tab.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Select */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  select, input[type=range] {
+    width: 100%;
+    font-size: 12px;
+    font-family: var(--sans);
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7080'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
+  input[type=range] {
+    padding: 0;
+    background-image: none;
+    height: 4px;
+    accent-color: var(--accent);
+    margin-top: 4px;
+  }
+
+  .range-row { display: flex; justify-content: space-between; align-items: center; }
+  .range-val { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
+  /* Legend */
+  #legend { display: flex; flex-direction: column; gap: 5px; max-height: 200px; overflow-y: auto; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Status */
+  #status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 8px 10px;
+    background: var(--surface2);
+    border-radius: 6px;
+    border-left: 2px solid var(--accent);
+    display: none;
+  }
+  #status.error { border-color: var(--accent2); color: #e85b8d; }
+
+  /* MAIN */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 2rem;
+    overflow: hidden;
+  }
+
+  .plot-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  #plot-title {
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+
+  #plot-subtitle {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .chart-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+
+  #main-chart { width: 100% !important; height: 100% !important; }
+
+  /* Loadings panel (PCA only) */
+  #loadings-panel {
+    margin-top: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: none;
+  }
+
+  #loadings-panel .section-label { margin-bottom: 0.5rem; }
+
+  .loadings-grid {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .loadings-col { flex: 1; min-width: 160px; }
+  .loadings-col h4 { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-bottom: 6px; }
+
+  .loading-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .loading-name { color: var(--muted); min-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+  .loading-bar-bg { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .loading-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+  .loading-val { font-family: var(--mono); color: var(--muted); min-width: 40px; text-align: right; }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--muted);
+  }
+  .placeholder-icon { font-size: 48px; opacity: 0.3; }
+  .placeholder p { font-size: 14px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>DR</span> · Explorer</div>
+  <h1>Dimensionality Reduction</h1>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div>
+      <div class="section-label">Dataset</div>
+      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" accept=".csv">
+        <div class="upload-icon">⬆</div>
+        <div class="upload-title">Upload CSV</div>
+        <div class="upload-sub">Click or drag &amp; drop</div>
+      </div>
+      <div id="file-info"></div>
+    </div>
+
+    <div id="status"></div>
+
+    <div>
+      <div class="section-label">Method</div>
+      <div class="method-tabs">
+        <button class="method-tab active" onclick="setMethod('pca')">PCA</button>
+        <button class="method-tab" onclick="setMethod('tsne')">t-SNE</button>
+        <button class="method-tab" onclick="setMethod('umap')">UMAP</button>
+      </div>
+    </div>
+
+    <div id="tsne-params" style="display:none;">
+      <div class="section-label">t-SNE params</div>
+      <div class="field">
+        <div class="range-row"><span style="font-size:11px;color:var(--muted);">Perplexity</span><span class="range-val" id="perp-val">30</span></div>
+        <input type="range" id="perp-slider" min="5" max="100" value="30">
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <div class="range-row"><span style="font-size:11px;color:var(--muted);">Iterations</span><span class="range-val" id="iter-val">500</span></div>
+        <input type="range" id="iter-slider" min="100" max="1000" step="100" value="500">
+      </div>
+    </div>
+
+    <div id="umap-params" style="display:none;">
+      <div class="section-label">UMAP params</div>
+      <div class="field">
+        <div class="range-row"><span style="font-size:11px;color:var(--muted);">Neighbors</span><span class="range-val" id="neighbors-val">15</span></div>
+        <input type="range" id="neighbors-slider" min="2" max="100" value="15">
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <div class="range-row"><span style="font-size:11px;color:var(--muted);">Min dist</span><span class="range-val" id="mindist-val">0.1</span></div>
+        <input type="range" id="mindist-slider" min="0.01" max="0.99" step="0.01" value="0.1">
+      </div>
+    </div>
+
+    <div id="color-section" style="display:none;">
+      <div class="section-label">Color by</div>
+      <div class="field">
+        <select id="color-select">
+          <option value="__none__">— none —</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="legend-section" style="display:none;">
+      <div class="section-label">Legend</div>
+      <div id="legend"></div>
+    </div>
+
+    <div id="run-section" style="display:none; margin-top:auto; padding-top:1rem;">
+      <button id="run-btn" onclick="runReduction()" style="width:100%; padding:9px; background:var(--accent); color:#fff; border:none; border-radius:7px; font-family:var(--mono); font-size:12px; font-weight:500; cursor:pointer; letter-spacing:0.06em; transition:opacity 0.15s;">
+        RUN
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="plot-header">
+      <div id="plot-title"></div>
+      <div id="plot-subtitle"></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon">◈</div>
+        <p>Upload a CSV to begin</p>
+      </div>
+      <canvas id="main-chart" style="display:none;"></canvas>
+    </div>
+    <div id="loadings-panel">
+      <div class="section-label">PCA Loadings</div>
+      <div class="loadings-grid" id="loadings-grid"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let rawData = [], numericCols = [], categoricalCols = [];
+let results = { pca: null, tsne: null, umap: null };
+let currentMethod = 'pca';
+let chartInstance = null;
+
+const PALETTE = [
+  '#5b8dee','#e85b8d','#5be8b4','#e8c25b','#b45be8',
+  '#5be880','#e8755b','#5bc8e8','#e85bb4','#a8e85b',
+  '#e88c5b','#5b5be8','#e8e85b','#5be8d8','#e85b5b'
+];
+
+// ─── File upload ──────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+document.getElementById('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); loadFile(e.dataTransfer.files[0]); });
+
+function loadFile(file) {
+  if (!file) return;
+  setStatus('Parsing CSV…');
+  Papa.parse(file, {
+    header: true, dynamicTyping: true, skipEmptyLines: true,
+    complete(result) {
+      rawData = result.data;
+      const cols = result.meta.fields || [];
+      numericCols = cols.filter(c => rawData.filter(r => typeof r[c] === 'number' && !isNaN(r[c])).length > rawData.length * 0.5);
+      categoricalCols = cols.filter(c => !numericCols.includes(c));
+
+      if (numericCols.length < 2) { setStatus('Need at least 2 numeric columns.', true); return; }
+
+      document.getElementById('file-info').textContent =
+        `${rawData.length} rows\n${numericCols.length} numeric cols\n${categoricalCols.length} categorical cols`;
+
+      populateColorSelect();
+      document.getElementById('color-section').style.display = 'block';
+      document.getElementById('run-section').style.display = 'block';
+      results = { pca: null, tsne: null, umap: null };
+      setStatus('');
+      runReduction();
+    },
+    error() { setStatus('Could not parse CSV.', true); }
+  });
+}
+
+function populateColorSelect() {
+  const sel = document.getElementById('color-select');
+  sel.innerHTML = '<option value="__none__">— none —</option>';
+  categoricalCols.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c; sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => { if (results[currentMethod]) renderChart(); });
+}
+
+// ─── Method switching ─────────────────────────────────────────────────────────
+function setMethod(m) {
+  currentMethod = m;
+  document.querySelectorAll('.method-tab').forEach((t,i) =>
+    t.classList.toggle('active', ['pca','tsne','umap'][i] === m));
+  document.getElementById('tsne-params').style.display = m === 'tsne' ? 'block' : 'none';
+  document.getElementById('umap-params').style.display = m === 'umap' ? 'block' : 'none';
+  document.getElementById('loadings-panel').style.display = m === 'pca' && results.pca ? 'block' : 'none';
+  if (results[m]) renderChart();
+}
+
+// Sliders
+['perp','iter','neighbors','mindist'].forEach(id => {
+  const slider = document.getElementById(id+'-slider');
+  if (slider) slider.addEventListener('input', function() {
+    document.getElementById(id+'-val').textContent = this.value;
+  });
+});
+
+// ─── Math helpers ─────────────────────────────────────────────────────────────
+function getMatrix() {
+  return rawData.map(row => numericCols.map(c => +row[c] || 0));
+}
+
+function standardize(M) {
+  const n = M.length, p = M[0].length;
+  const means = numericCols.map((_, j) => M.reduce((s, r) => s + r[j], 0) / n);
+  const stds  = numericCols.map((_, j) => {
+    const v = M.reduce((s, r) => s + (r[j]-means[j])**2, 0) / (n-1);
+    return Math.sqrt(v) || 1;
+  });
+  return M.map(r => r.map((v, j) => (v - means[j]) / stds[j]));
+}
+
+// Covariance matrix
+function covMatrix(M) {
+  const n = M.length, p = M[0].length;
+  const C = Array.from({length:p}, () => new Array(p).fill(0));
+  for (let i = 0; i < p; i++)
+    for (let j = i; j < p; j++) {
+      let s = 0;
+      for (let k = 0; k < n; k++) s += M[k][i] * M[k][j];
+      C[i][j] = C[j][i] = s / (n-1);
+    }
+  return C;
+}
+
+// Power iteration for top-k eigenvectors
+function topKEigenvectors(C, k=2, iters=200) {
+  const p = C.length;
+  let vecs = [], vals = [];
+  let Cr = C.map(r => [...r]);
+
+  for (let e = 0; e < k; e++) {
+    let v = Array.from({length:p}, () => Math.random()-0.5);
+    let norm = Math.sqrt(v.reduce((s,x)=>s+x*x,0));
+    v = v.map(x=>x/norm);
+
+    for (let it = 0; it < iters; it++) {
+      let w = new Array(p).fill(0);
+      for (let i = 0; i < p; i++)
+        for (let j = 0; j < p; j++) w[i] += Cr[i][j]*v[j];
+      const lambda = w.reduce((s,x,i)=>s+x*v[i],0);
+      norm = Math.sqrt(w.reduce((s,x)=>s+x*x,0));
+      v = w.map(x=>x/norm);
+      if (it === iters-1) vals.push(lambda);
+    }
+    vecs.push(v);
+    // deflate
+    for (let i = 0; i < p; i++)
+      for (let j = 0; j < p; j++) Cr[i][j] -= vals[e]*v[i]*v[j];
+  }
+  return { vecs, vals };
+}
+
+function projectPCA(M, vecs) {
+  return M.map(row => vecs.map(v => row.reduce((s,x,i)=>s+x*v[i],0)));
+}
+
+// ─── PCA ──────────────────────────────────────────────────────────────────────
+function runPCA() {
+  const M = standardize(getMatrix());
+  const C = covMatrix(M);
+  const { vecs, vals } = topKEigenvectors(C, 2, 300);
+  const projected = projectPCA(M, vecs);
+  const totalVar = vals.reduce((s,v)=>s+Math.abs(v),0);
+  const varExplained = vals.map(v => (Math.abs(v)/totalVar*100).toFixed(1));
+  const loadings = vecs.map(v => numericCols.map((c,i) => ({ col: c, val: v[i] })));
+  return { points: projected, varExplained, loadings };
+}
+
+// ─── t-SNE ────────────────────────────────────────────────────────────────────
+function runTSNE(perplexity, iterations) {
+  const M = standardize(getMatrix());
+  const n = M.length, p = M[0].length;
+
+  // pairwise squared distances
+  const D = Array.from({length:n}, (_,i) =>
+    Array.from({length:n}, (_,j) => {
+      let s=0; for(let k=0;k<p;k++) s+=(M[i][k]-M[j][k])**2; return s;
+    })
+  );
+
+  // Gaussian affinities with binary search for sigma
+  const P = Array.from({length:n}, ()=>new Array(n).fill(0));
+  const logPerp = Math.log(perplexity);
+
+  for (let i = 0; i < n; i++) {
+    let lo = 0, hi = 1e10, beta = 1.0;
+    for (let t = 0; t < 50; t++) {
+      let sumP=0, H=0;
+      const ps = [];
+      for (let j = 0; j < n; j++) {
+        if (i===j){ps.push(0);continue;}
+        const v = Math.exp(-D[i][j]*beta);
+        ps.push(v); sumP+=v;
+      }
+      if (sumP<1e-12){ps.fill(0);break;}
+      for (let j = 0; j < n; j++) { ps[j]/=sumP; H -= ps[j]>1e-12 ? ps[j]*Math.log(ps[j]) : 0; }
+      const diff = H - logPerp;
+      if (Math.abs(diff)<1e-5){for(let j=0;j<n;j++)P[i][j]=ps[j];break;}
+      if (diff>0){lo=beta;beta=hi<1e9?(lo+hi)/2:beta*2;}
+      else{hi=beta;beta=(lo+hi)/2;}
+      if(t===49) for(let j=0;j<n;j++)P[i][j]=ps[j];
+    }
+  }
+
+  // Symmetrize
+  const Ps = Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>(P[i][j]+P[j][i])/(2*n)));
+
+  // Initialize Y
+  let Y = Array.from({length:n},()=>[randn()*0.01, randn()*0.01]);
+  let gains = Array.from({length:n},()=>[1,1]);
+  let iY = Array.from({length:n},()=>[0,0]);
+  const lr=200, momentum=0.5, finalMomentum=0.8, momentumSwitch=250;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const mom = iter < momentumSwitch ? momentum : finalMomentum;
+
+    // Q distribution
+    const num = Array.from({length:n},()=>new Array(n).fill(0));
+    let sumQ = 0;
+    for (let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+      const d = 1/(1+(Y[i][0]-Y[j][0])**2+(Y[i][1]-Y[j][1])**2);
+      num[i][j]=num[j][i]=d; sumQ+=2*d;
+    }
+    sumQ = Math.max(sumQ,1e-12);
+
+    // Gradient
+    const dY = Array.from({length:n},()=>[0,0]);
+    for (let i=0;i<n;i++) for(let j=0;j<n;j++){
+      if(i===j) continue;
+      const q=num[i][j]/sumQ;
+      const mult=4*(Ps[i][j]-q)*num[i][j];
+      dY[i][0]+=mult*(Y[i][0]-Y[j][0]);
+      dY[i][1]+=mult*(Y[i][1]-Y[j][1]);
+    }
+
+    for(let i=0;i<n;i++) for(let d=0;d<2;d++){
+      gains[i][d]=Math.max(0.01, (Math.sign(dY[i][d])!==Math.sign(iY[i][d]))?gains[i][d]+0.2:gains[i][d]*0.8);
+      iY[i][d]=mom*iY[i][d]-lr*gains[i][d]*dY[i][d];
+      Y[i][d]+=iY[i][d];
+    }
+
+    // Center
+    const mx=Y.reduce((s,r)=>s+r[0],0)/n, my=Y.reduce((s,r)=>s+r[1],0)/n;
+    Y=Y.map(r=>[r[0]-mx,r[1]-my]);
+  }
+  return { points: Y };
+}
+
+function randn() {
+  let u=0,v=0;
+  while(u===0)u=Math.random();
+  while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+// ─── UMAP ─────────────────────────────────────────────────────────────────────
+function runUMAP(nNeighbors, minDist) {
+  const M = standardize(getMatrix());
+  const n = M.length, p = M[0].length;
+  nNeighbors = Math.min(nNeighbors, n-1);
+
+  // Euclidean distances + kNN
+  const knn = Array.from({length:n}, (_,i) => {
+    const dists = Array.from({length:n},(_,j)=>{
+      let s=0; for(let k=0;k<p;k++) s+=(M[i][k]-M[j][k])**2; return {j,d:Math.sqrt(s)};
+    }).filter(x=>x.j!==i).sort((a,b)=>a.d-b.d).slice(0,nNeighbors);
+    return dists;
+  });
+
+  // Fuzzy simplicial set
+  const graph = Array.from({length:n},()=>new Array(n).fill(0));
+  for (let i=0;i<n;i++){
+    const rho = knn[i][0].d;
+    let sigma=1.0, lo=0, hi=1e10;
+    for(let t=0;t<64;t++){
+      let s=0;
+      knn[i].forEach(({d})=>s+=Math.exp(-(Math.max(0,d-rho)/sigma)));
+      const diff=s-Math.log2(nNeighbors);
+      if(Math.abs(diff)<1e-5)break;
+      if(diff>0){lo=sigma;sigma=hi<1e9?(lo+hi)/2:sigma*2;}
+      else{hi=sigma;sigma=(lo+hi)/2;}
+    }
+    knn[i].forEach(({j,d})=>{
+      const v=Math.exp(-(Math.max(0,d-rho)/sigma));
+      graph[i][j]=v;
+    });
+  }
+  // Symmetrize: w = a+b - a*b
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+    const a=graph[i][j], b=graph[j][i];
+    graph[i][j]=graph[j][i]=a+b-a*b;
+  }
+
+  // Initialize with PCA result if available, else random
+  let Y;
+  if (results.pca) {
+    Y = results.pca.points.map(r=>[r[0]*0.1,r[1]*0.1]);
+  } else {
+    Y = Array.from({length:n},()=>[randn()*0.01,randn()*0.01]);
+  }
+
+  // a,b params from minDist
+  const b=1, a=1/(minDist**b);
+
+  // SGD
+  const lr=1, epochs=300, negSamples=5;
+  // Collect edges
+  const edges=[];
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(graph[i][j]>0.01) edges.push([i,j,graph[i][j]]);
+
+  for(let ep=0;ep<epochs;ep++){
+    const ep_lr = lr*(1-ep/epochs);
+    // shuffle
+    for(let k=edges.length-1;k>0;k--){const r=Math.floor(Math.random()*(k+1));[edges[k],edges[r]]=[edges[r],edges[k]];}
+    for(const [i,j,w] of edges){
+      let dx=Y[i][0]-Y[j][0], dy=Y[i][1]-Y[j][1];
+      let d2=dx*dx+dy*dy; if(d2<1e-6)d2=1e-6;
+      const d=Math.sqrt(d2);
+      const grad_coeff=-2*a*b*Math.pow(d2,b-1)/(1+a*Math.pow(d2,b));
+      const gx=grad_coeff*dx*ep_lr, gy=grad_coeff*dy*ep_lr;
+      Y[i][0]+=gx; Y[i][1]+=gy;
+      Y[j][0]-=gx; Y[j][1]-=gy;
+      // negative samples
+      for(let ns=0;ns<negSamples;ns++){
+        const k=Math.floor(Math.random()*n); if(k===i||k===j) continue;
+        let nx=Y[i][0]-Y[k][0], ny=Y[i][1]-Y[k][1];
+        let nd2=nx*nx+ny*ny; if(nd2<1e-6)nd2=1e-6;
+        const neg_coeff=2*b/(nd2*(1+a*Math.pow(nd2,b)));
+        const ngx=neg_coeff*nx*ep_lr, ngy=neg_coeff*ny*ep_lr;
+        Y[i][0]+=ngx; Y[i][1]+=ngy;
+      }
+    }
+  }
+  return { points: Y };
+}
+
+// ─── Run ──────────────────────────────────────────────────────────────────────
+async function runReduction() {
+  if (!rawData.length) return;
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = 'RUNNING…'; btn.style.opacity='0.6';
+
+  setStatus('Computing ' + currentMethod.toUpperCase() + '…');
+
+  // Yield to browser
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    if (currentMethod === 'pca') {
+      results.pca = runPCA();
+    } else if (currentMethod === 'tsne') {
+      const perp = +document.getElementById('perp-slider').value;
+      const iters = +document.getElementById('iter-slider').value;
+      results.tsne = runTSNE(perp, iters);
+    } else {
+      const neighbors = +document.getElementById('neighbors-slider').value;
+      const minDist = +document.getElementById('mindist-slider').value;
+      results.umap = runUMAP(neighbors, minDist);
+    }
+    setStatus('');
+    renderChart();
+  } catch(e) {
+    setStatus('Error: ' + e.message, true);
+  }
+
+  btn.disabled = false; btn.textContent = 'RUN'; btn.style.opacity='1';
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderChart() {
+  const res = results[currentMethod];
+  if (!res) return;
+
+  const colorCol = document.getElementById('color-select').value;
+  const points = res.points;
+  const n = points.length;
+
+  // Build color mapping
+  let colors, categories=[], catMap={};
+  if (colorCol !== '__none__' && categoricalCols.includes(colorCol)) {
+    const vals = rawData.map(r => String(r[colorCol] ?? 'N/A'));
+    categories = [...new Set(vals)].sort();
+    categories.forEach((c,i) => catMap[c] = PALETTE[i % PALETTE.length]);
+    colors = vals.map(v => catMap[v]);
+  } else {
+    colors = new Array(n).fill(PALETTE[0]);
+  }
+
+  // Legend
+  const legSection = document.getElementById('legend-section');
+  const legDiv = document.getElementById('legend');
+  if (categories.length > 0 && categories.length <= 15) {
+    legDiv.innerHTML = categories.map(c =>
+      `<div class="legend-item"><div class="legend-dot" style="background:${catMap[c]}"></div><span>${c}</span></div>`
+    ).join('');
+    legSection.style.display = 'block';
+  } else {
+    legSection.style.display = 'none';
+  }
+
+  // Destroy old chart
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  const canvas = document.getElementById('main-chart');
+  document.getElementById('placeholder').style.display = 'none';
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+
+  // Plot title
+  const titles = { pca: 'Principal Component Analysis', tsne: 't-SNE', umap: 'UMAP' };
+  document.getElementById('plot-title').textContent = titles[currentMethod];
+
+  let subtitle = '';
+  if (currentMethod === 'pca' && res.varExplained) {
+    subtitle = `PC1: ${res.varExplained[0]}% variance · PC2: ${res.varExplained[1]}% variance`;
+  } else if (currentMethod === 'tsne') {
+    subtitle = `perplexity: ${document.getElementById('perp-slider').value} · iters: ${document.getElementById('iter-slider').value}`;
+  } else if (currentMethod === 'umap') {
+    subtitle = `neighbors: ${document.getElementById('neighbors-slider').value} · min_dist: ${document.getElementById('mindist-slider').value}`;
+  }
+  document.getElementById('plot-subtitle').textContent = subtitle;
+
+  // Scatter dataset
+  const scatterData = points.map((pt, i) => ({
+    x: pt[0], y: pt[1],
+    label: rawData[i] ? (colorCol !== '__none__' ? String(rawData[i][colorCol] ?? '') : '') : ''
+  }));
+
+  const datasets = [{
+    label: 'Data',
+    data: scatterData,
+    backgroundColor: colors.map(c => c + 'bb'),
+    borderColor: colors.map(c => c),
+    borderWidth: 0.5,
+    pointRadius: 5,
+    pointHoverRadius: 7,
+    type: 'scatter'
+  }];
+
+  // PCA loading arrows
+  let arrowPlugin = null;
+  if (currentMethod === 'pca' && res.loadings) {
+    // scale factor
+    const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
+    const xrange = Math.max(...xs)-Math.min(...xs), yrange = Math.max(...ys)-Math.min(...ys);
+    const scale = Math.min(xrange, yrange) * 0.45;
+
+    arrowPlugin = {
+      id: 'arrows',
+      afterDraw(chart) {
+        const {ctx, scales:{x,y}} = chart;
+        const cx = x.getPixelForValue(0), cy = y.getPixelForValue(0);
+
+        res.loadings[0].forEach((l, i) => {
+          const ex = l.val * scale, ey = res.loadings[1][i].val * scale;
+          const px = x.getPixelForValue(ex), py = y.getPixelForValue(ey);
+
+          // arrow line
+          ctx.save();
+          ctx.strokeStyle = '#e8c25b88';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px, py); ctx.stroke();
+
+          // arrowhead
+          const angle = Math.atan2(py-cy, px-cx);
+          ctx.fillStyle = '#e8c25b';
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px-10*Math.cos(angle-0.35), py-10*Math.sin(angle-0.35));
+          ctx.lineTo(px-10*Math.cos(angle+0.35), py-10*Math.sin(angle+0.35));
+          ctx.closePath(); ctx.fill();
+
+          // label
+          const lx = px + (px-cx)*0.12, ly = py + (py-cy)*0.12;
+          ctx.fillStyle = '#e8c25b';
+          ctx.font = '10px DM Mono, monospace';
+          ctx.textAlign = px > cx ? 'left' : 'right';
+          ctx.textBaseline = py > cy ? 'top' : 'bottom';
+          ctx.fillText(l.col.length > 10 ? l.col.slice(0,10)+'…' : l.col, lx, ly);
+          ctx.restore();
+        });
+      }
+    };
+  }
+
+  const plugins = [arrowPlugin].filter(Boolean);
+
+  chartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    plugins,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(item) {
+              const d = item.raw;
+              const base = `(${d.x.toFixed(3)}, ${d.y.toFixed(3)})`;
+              return d.label ? `${d.label}  ${base}` : base;
+            }
+          },
+          backgroundColor: '#1e2026',
+          borderColor: '#2a2d35',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#6b7080',
+          titleFont: { family: 'DM Mono, monospace', size: 11 },
+          bodyFont: { family: 'DM Mono, monospace', size: 11 }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b7080', font: { size: 10, family: 'DM Mono, monospace' } },
+          grid: { color: 'rgba(42,45,53,0.8)' },
+          title: { display: true, text: currentMethod==='pca'?'PC1':'Dim 1', color:'#6b7080', font:{size:11} }
+        },
+        y: {
+          ticks: { color: '#6b7080', font: { size: 10, family: 'DM Mono, monospace' } },
+          grid: { color: 'rgba(42,45,53,0.8)' },
+          title: { display: true, text: currentMethod==='pca'?'PC2':'Dim 2', color:'#6b7080', font:{size:11} }
+        }
+      }
+    }
+  });
+
+  // Loadings panel
+  if (currentMethod === 'pca' && res.loadings) {
+    renderLoadings(res.loadings);
+    document.getElementById('loadings-panel').style.display = 'block';
+  } else {
+    document.getElementById('loadings-panel').style.display = 'none';
+  }
+}
+
+function renderLoadings(loadings) {
+  const grid = document.getElementById('loadings-grid');
+  grid.innerHTML = '';
+  loadings.forEach((pc, pi) => {
+    const sorted = [...pc].sort((a,b) => Math.abs(b.val)-Math.abs(a.val)).slice(0, 10);
+    const maxVal = Math.max(...sorted.map(x=>Math.abs(x.val)));
+    const col = document.createElement('div');
+    col.className = 'loadings-col';
+    col.innerHTML = `<h4>PC${pi+1}</h4>` + sorted.map(({col:c, val}) => {
+      const pct = (Math.abs(val)/maxVal*100).toFixed(0);
+      const color = val >= 0 ? '#5b8dee' : '#e85b8d';
+      return `<div class="loading-bar-row">
+        <span class="loading-name" title="${c}">${c}</span>
+        <div class="loading-bar-bg"><div class="loading-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="loading-val">${val.toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    grid.appendChild(col);
+  });
+}
+
+function setStatus(msg, isError=false) {
+  const el = document.getElementById('status');
+  if (!msg) { el.style.display='none'; return; }
+  el.textContent = msg;
+  el.className = isError ? 'error' : '';
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>
